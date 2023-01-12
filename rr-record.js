@@ -8,7 +8,7 @@ LogCanvas = (() => {
    const MAX_SNAPSHOT_SIZE = 16384;
    const SNAPSHOT_INLINE_LEN = 100;
    const READABLE_SNAPSHOTS = false;
-   const DEDUPE_SNAPSHOTS = true;
+   const DEDUPE_SNAPSHOTS = false;
    const LOG_CALL_NAME_LIST = [
       //'linkProgram', 'bindAttribLocation',
       //'getParameter',
@@ -118,12 +118,44 @@ LogCanvas = (() => {
 
    // -
 
+const decoder = new TextDecoder();
+const alphabet =
+  'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+const lookup = Object.fromEntries(
+  Array.from(alphabet).map((a, i) => [a.charCodeAt(0), i])
+);
+lookup['='.charCodeAt(0)] = 0;
+lookup['-'.charCodeAt(0)] = 62;
+lookup['_'.charCodeAt(0)] = 63;
+
+const encodeLookup = Object.fromEntries(
+  Array.from(alphabet).map((a, i) => [i, a.charCodeAt(0)])
+);
+function toBase64(bytes) {
+  console.log("b64 " + bytes.length);
+  let m = bytes.length;
+  let k = m % 3;
+  let n = Math.floor(m / 3) * 4 + (k && k + 1);
+  let N = Math.ceil(m / 3) * 4;
+  let encoded = new Uint8Array(N);
+
+  for (let i = 0, j = 0; j < m; i += 4, j += 3) {
+    let y = (bytes[j] << 16) + (bytes[j + 1] << 8) + (bytes[j + 2] | 0);
+    encoded[i] = encodeLookup[y >> 18];
+    encoded[i + 1] = encodeLookup[(y >> 12) & 0x3f];
+    encoded[i + 2] = encodeLookup[(y >> 6) & 0x3f];
+    encoded[i + 3] = encodeLookup[y & 0x3f];
+  }
+
+  let base64 = decoder.decode(new Uint8Array(encoded.buffer, 0, n));
+  if (k === 1) base64 += '==';
+  if (k === 2) base64 += '=';
+  return base64;
+}
+
    const Base64 = {
       encode: dec_ab => {
-         const dec_u8a = new Uint8Array(dec_ab);
-         const dec_bstr = String.fromCodePoint(...dec_u8a);
-         const enc = btoa(dec_bstr);
-         return enc;
+         return toBase64(new Uint8Array(dec_ab));
       },
       decode: enc => {
          const dec_bstr = atob(enc);
