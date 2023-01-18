@@ -154,8 +154,8 @@ function toBase64(bytes) {
 }
 
    const Base64 = {
-      encode: dec_ab => {
-         return toBase64(new Uint8Array(dec_ab));
+      encode: dec_abv => {
+         return toBase64(new Uint8Array(dec_abv.buffer, dec_abv.byteOffset, dec_abv.byteLength));
       },
       decode: enc => {
          const dec_bstr = atob(enc);
@@ -185,7 +185,7 @@ function toBase64(bytes) {
       if (READABLE_SNAPSHOTS) {
          str = view.toString();
       } else {
-         str = '^' + Base64.encode(view.buffer);
+         str = '^' + Base64.encode(view);
       }
       let hash;
       if (DEDUPE_SNAPSHOTS) {
@@ -567,6 +567,77 @@ function toBase64(bytes) {
          if (!RECORDING_FRAMES) return ret;
 
          if (IGNORED_FUNCS[k]) return ret;
+
+         if (k == 'bufferData' && args.length == 5) {
+             console.log("override bufferData" + args[3] + " " + args[4])
+             let subarray = args[1].subarray(args[3], args[3] + args[4]);
+             //let subarray = new DataView(args[1].buffer, args[3], args[4]);
+             RECORDING.pickle_call(obj, k, [args[0], subarray, args[2], 0, args[4]], ret);
+             console.log("done override bufferData")
+             return ret;
+         }
+         var uniforms_fns = ['uniform4fv', 'uniform1fv'];
+         if (uniforms_fns.includes(k) && args.length == 4) {
+             let subarray = args[1].subarray(args[2], args[2] + args[3]);
+             RECORDING.pickle_call(obj, k, [args[0], subarray, 0, args[3]], ret);
+             return ret;
+         }
+
+         var uniforms_matrix_fns = ['uniformMatrix2fv', 'uniformMatrix4fv'];
+         if (uniforms_matrix_fns.includes(k) && args.length == 5) {
+             let subarray = args[2].subarray(args[3], args[3] + args[4]);
+             RECORDING.pickle_call(obj, k, [args[0], args[1], subarray, 0, args[4]], ret);
+             return ret;
+         }
+
+
+         function colorChannelsInGlTextureFormat(format) {
+    // Micro-optimizations for size: map format to size by subtracting smallest enum value (0x1902) from all values first.
+    // Also omit the most common size value (1) from the list, which is assumed by formats not on the list.
+    var colorChannels = {
+      // 0x1902 /* GL_DEPTH_COMPONENT */ - 0x1902: 1,
+      // 0x1906 /* GL_ALPHA */ - 0x1902: 1,
+      [ 0x1907 /* GL_RGB */ - 0x1902 ]: 3,
+      [ 0x1908 /* GL_RGBA */ - 0x1902 ]: 4,
+      // 0x1909 /* GL_LUMINANCE */ - 0x1902: 1,
+      [ 0x190A /*GL_LUMINANCE_ALPHA*/ - 0x1902 ]: 2,
+      [ 0x8C40 /*(GL_SRGB_EXT)*/ - 0x1902 ]: 3,
+      [ 0x8C42 /*(GL_SRGB_ALPHA_EXT*/ - 0x1902 ]: 4,
+      // 0x1903 /* GL_RED */ - 0x1902: 1,
+      [ 0x8227 /*GL_RG*/ - 0x1902 ]: 2,
+      [ 0x8228 /*GL_RG_INTEGER*/ - 0x1902 ]: 2,
+      // 0x8D94 /* GL_RED_INTEGER */ - 0x1902: 1,
+      [ 0x8D98 /*GL_RGB_INTEGER*/ - 0x1902 ]: 3,
+      [ 0x8D99 /*GL_RGBA_INTEGER*/ - 0x1902 ]: 4
+    };
+    return colorChannels[format - 0x1902]||1;
+  }
+
+             function computeUnpackAlignedImageSize(width, height, sizePerPixel, alignment) {
+                 function roundedToNextMultipleOf(x, y) {
+                     return (x + y - 1) & -y;
+                 }
+                 var plainRowSize = width * sizePerPixel;
+                 var alignedRowSize = roundedToNextMultipleOf(plainRowSize, alignment);
+                 return height * alignedRowSize;
+             }
+ 
+         if (k == 'texSubImage2D' && args.length == 10) {
+         var width = args[4];
+         var height = args[5];
+         var format = args[6];
+             
+            var byteSize = 8;
+             var sizePerPixel = colorChannelsInGlTextureFormat(format) * byteSize;
+             var bytes = computeUnpackAlignedImageSize(width, height, sizePerPixel, 4);
+             console.log("texsubimage: " + width + ", " + height);
+             let subarray = args[8].subarray(args[9], args[9] + bytes);
+             //let subarray = new DataView(args[1].buffer, args[2] * 4, args[3] * 4);
+             RECORDING.pickle_call(obj, k, [args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], subarray, 0], ret);
+             return ret;
+         }
+
+
 
          RECORDING.pickle_call(obj, k, args, ret);
 
