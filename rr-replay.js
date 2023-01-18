@@ -24,6 +24,57 @@ function invoke(fn) {
     return fn();
 }
 
+
+// Written by ChatGPT with the following prompts:
+// - Write a simple base64 decoder in C that doesn't use strchr
+// - translate that code to JS
+const base64DecodingTable = new Uint8Array(256);
+
+function buildDecodingTable() {
+    for (let i = 0; i < 64; i++) {
+        base64DecodingTable[`ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/`.charCodeAt(i)] = i;
+    }
+}
+
+function base64Decode(data) {
+    let padding = 0;
+    let outputLength = 0;
+
+    if (data.length % 4 !== 0) {
+        return null;
+    }
+
+    for (let i = data.length - 1; data[i] === '='; i--) {
+        padding++;
+    }
+
+    outputLength = (data.length / 4) * 3 - padding;
+    const decodedData = new Uint8Array(outputLength);
+
+    for (let i = 0, j = 0; i < data.length;) {
+        let sextetA = data[i] === '=' ? 0 & i++ : base64DecodingTable[data.charCodeAt(i++)];
+        let sextetB = data[i] === '=' ? 0 & i++ : base64DecodingTable[data.charCodeAt(i++)];
+        let sextetC = data[i] === '=' ? 0 & i++ : base64DecodingTable[data.charCodeAt(i++)];
+        let sextetD = data[i] === '=' ? 0 & i++ : base64DecodingTable[data.charCodeAt(i++)];
+
+        let triple = (sextetA << 3 * 6) + (sextetB << 2 * 6) + (sextetC << 1 * 6) + (sextetD << 0 * 6);
+
+        if (j < outputLength) {
+            decodedData[j++] = (triple >> 2 * 8) & 0xFF;
+        }
+        if (j < outputLength) {
+            decodedData[j++] = (triple >> 1 * 8) & 0xFF;
+        }
+        if (j < outputLength) {
+            decodedData[j++] = (triple >> 0 * 8) & 0xFF;
+        }
+    }
+
+    return decodedData;
+}
+
+buildDecodingTable();
+
 const Base64 = {
    encode: dec_ab => {
       const dec_u8a = new Uint8Array(dec_ab);
@@ -32,14 +83,17 @@ const Base64 = {
       return enc;
    },
    decode: enc => {
-      const dec_bstr = atob(enc);
-      const dec_u8a = new Uint8Array([].map.call(dec_bstr, x => x.codePointAt(0)));
-      return dec_u8a.buffer;
+      //   const dec_bstr = atob(enc);
+      //const dec_u8a = new Uint8Array([].map.call(dec_bstr, x => x.codePointAt(0)));
+      const other = base64Decode(enc);
+      return other.buffer;
+      //console.log('b64');
    },
 };
 
 function from_data_snapshot(str) {
    let [type, data] = split_once(str, ':');
+   console.log("from_data_snapshot: "  + type + " " + str.length);
    if (type == 'Object') {
       return JSON.parse(data);
    }
@@ -103,6 +157,7 @@ class Recording {
          console.error(`Warning: Recording has version:${ret.version}, but decoder has version ${RECORDING_VERSION}!`);
       }
 
+      let snapshot_count = 0;
       const decode_proms = [];
       for (const k in ret.snapshots) {
          decode_proms.push( (async () => {
@@ -111,6 +166,7 @@ class Recording {
                if (str.startsWith('data:')) {
                   const elem = document.createElement('img');
                   elem.src = str;
+                  console.log("load image: " + snapshot_count);
                   try {
                      await elem.decode();
                   } catch (e) {
@@ -124,6 +180,7 @@ class Recording {
             })();
             ret.snapshots[k] = obj;
          })() );
+         snapshot_count++;
       }
       await Promise.all(decode_proms);
 
@@ -259,7 +316,7 @@ class Recording {
    play_call(element_map_mut, frame_id, call_id) {
       const call = this.frames[frame_id][call_id];
       const [elem_key, func_name, args, ret] = call;
-      //console.log(call);
+      console.log(call);
       if (func_name == 'throw') throw {frame_id, call_id, call};
 
       // `call` is fixed. as is `this.snapshots`.
