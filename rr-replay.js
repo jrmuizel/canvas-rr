@@ -5,7 +5,7 @@ const BAKE_AND_REHEAT_CALLS = false;
 const BAKE_ASSUME_OBJ_FUNC_LOOKUP_IMMUTABLE = true;
 const DEDUPE_STRINGS = true;
 const DEDUPE_CALLS = true;
-
+//var _CRR_REPLAY_SPEW = true;
 let SPEW_ON_GL_ERROR;
 //SPEW_ON_GL_ERROR = true;
 //SPEW_ON_GL_ERROR = ['bufferSubData'];
@@ -175,6 +175,15 @@ class Recording {
                   }
                   return elem;
                }
+               if (str.startsWith('video:')) {
+                  const elem = document.createElement('video');
+                  elem.src = str.replace("video:", "");
+                  elem.loop = true;
+                  elem.play();
+                  console.log("load video: " + snapshot_count);
+                  return elem;
+               }
+
 
                return from_data_snapshot(str);
             })();
@@ -316,7 +325,6 @@ class Recording {
    play_call(element_map_mut, frame_id, call_id) {
       const call = this.frames[frame_id][call_id];
       const [elem_key, func_name, args, ret] = call;
-      console.log(call);
       if (func_name == 'throw') throw {frame_id, call_id, call};
 
       // `call` is fixed. as is `this.snapshots`.

@@ -278,8 +278,13 @@ function toBase64(bytes) {
          switch (type) {
          case 'HTMLCanvasElement':
          case 'HTMLImageElement':
-         case 'HTMLVideoElement':
             return [to_data_url(obj)];
+         case 'HTMLVideoElement':
+            if (obj.srcObject) {
+               return [to_data_url(obj)];
+            } else {
+               return [obj.src]
+            }
          }
          if (type.startsWith('WebGL')) return undefined;
          if (type == 'CanvasRenderingContext2D') return undefined;
